@@ -5,7 +5,7 @@ class ForthMemory {
      constructor(forth) {
         this.forth = forth;
         this.resetStack();
-        this.rsp = this.r0();
+        this.resetReturnStack();
         this.resetMemory();
     }
 
@@ -14,6 +14,7 @@ class ForthMemory {
         this.memory.fill(0); 
     }
     resetStack() { this.dsp = this.s0(); }
+    resetReturnStack() { this.rsp = this.r0(); }
     s0() { return 0xEFFC; }
     r0() { return 0x7FFC; }
 
@@ -120,12 +121,14 @@ class Forth {
        this.initPos = 0;
    
        this.lastWord = 0;
-       this.inputBuffer = [];
-       this.outputBuffer = [];
-
+       this.resetBuffers(); 
        this.memoryInitializer().initializeMemory();
        
        this.state = "running";
+    }
+    resetBuffers() {
+        this.inputBuffer = [];
+        this.outputBuffer = []; 
     }
     input(aString) {
         for (var i = 0; i < aString.length; i++) {
@@ -205,6 +208,14 @@ class Forth {
     }
     makeRunning() { this.state = "running"; }
     noInput() { this.state = "noInput"; }
+    emergencyStop() { 
+        // na error occured
+        console.log("emergency stop");
+        this.noInput();
+        this.resetBuffers();
+        this.memory.resetStack();
+        this.memory.resetReturnStack();  
+    }
     memoryInitializer() { return new ForthStandardMemoryInitializer(this); }
     outputBufferoutputBufferString() { return this.outputBuffer.toByteString(); }
     privComma(value) {
@@ -1139,7 +1150,8 @@ class ForthCodeInterpret extends ForthCodeWithHead {
                 interpretIsLit = true;
                 aCodeword = this.forth.addressForLabel('codeword_LIT');
             } else {
-                typeError("unknown word: " + toFind.toByteString());
+                typeError("Unknown word: " + toFind.toByteString());
+                this.forth.emergencyStop();
                 return;
                 //throw new Error( "unknown word: " + toFind.toByteString() );
             }         
@@ -2087,7 +2099,7 @@ function typeError(aString)
 {
     for (let i = 0; i < aString.length; i++)
         typeCharacter(aString.charCodeAt(i));
-        typeCharacter(13);
+    typeCharacter(13);
 }
 
 function specialchar(char)
