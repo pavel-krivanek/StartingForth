@@ -210,11 +210,11 @@ class Forth {
     noInput() { this.state = "noInput"; }
     emergencyStop() { 
         // na error occured
-        console.log("emergency stop");
         this.noInput();
         this.resetBuffers();
         this.memory.resetStack();
         this.memory.resetReturnStack();  
+  
     }
     memoryInitializer() { return new ForthStandardMemoryInitializer(this); }
     outputBufferoutputBufferString() { return this.outputBuffer.toByteString(); }
@@ -2044,6 +2044,211 @@ forth.input(`
 ( ---------------- )
 
 
+: HASH
+ SWAP 1+ XOR
+;
+
+: HASH-N ( x1 x2 ... xn n -- h )
+ 0 >R
+ BEGIN
+ DUP 0 >
+ WHILE
+ SWAP R> HASH >R
+ 2-
+ REPEAT
+ DROP R>
+;
+
+VARIABLE TEST-NUMBER
+VARIABLE TDEPTH
+
+: TSTART
+    0 TEST-NUMBER !
+;
+
+: T{
+    TEST-NUMBER @ 1+ TEST-NUMBER !
+    DEPTH TDEPTH !
+;
+
+: ->
+    DEPTH TDEPTH @ -
+    HASH-N 
+    DEPTH TDEPTH !
+;
+
+: }T
+    DEPTH TDEPTH @ -
+    HASH-N
+    = 0= IF
+           ." TEST FAILED: " TEST-NUMBER @ . CR
+        QUIT 
+    THEN
+;
+
+: TEND ;
+
+TSTART
+    T{ 0 0 AND -> 0 }T
+    T{ 0 1 AND -> 0 }T
+    T{ 1 0 AND -> 0 }T
+    T{ 1 1 AND -> 1 }T 
+
+    T{ 0 INVERT 1 AND -> 1 }T
+    T{ 1 INVERT 1 AND -> 0 }T
+
+    T{ 1 2 DROP -> 1 }T
+    T{ 1 2 SWAP -> 2 1 }T
+
+    0    CONSTANT 0S
+    0 INVERT CONSTANT 1S
+    
+    T{ 0S INVERT -> 1S }T
+    T{ 1S INVERT -> 0S }T
+
+    T{ 0S 0S AND -> 0S }T
+    T{ 0S 1S AND -> 0S }T
+    T{ 1S 0S AND -> 0S }T
+    T{ 1S 1S AND -> 1S }T
+
+    T{ 0S 0S OR -> 0S }T
+    T{ 0S 1S OR -> 1S }T
+    T{ 1S 0S OR -> 1S }T
+    T{ 1S 1S OR -> 1S }T
+    
+    T{ 0S 0S XOR -> 0S }T
+    T{ 0S 1S XOR -> 1S }T
+    T{ 1S 0S XOR -> 1S }T
+    T{ 1S 1S XOR -> 0S }T
+
+    0S CONSTANT <FALSE>
+    1S CONSTANT <TRUE>
+
+    T{ 0 0= -> <TRUE> }T
+    T{ 1 0= -> <FALSE> }T
+    T{ 2 0= -> <FALSE> }T
+    T{ -1 0= -> <FALSE> }T   
+    
+    T{ 0 0 = -> <TRUE> }T
+    T{ 1 1 = -> <TRUE> }T
+    T{ -1 -1 = -> <TRUE> }T
+    T{ 1 0 = -> <FALSE> }T
+    T{ -1 0 = -> <FALSE> }T
+    T{ 0 1 = -> <FALSE> }T
+    T{ 0 -1 = -> <FALSE> }T
+
+    T{ 0 0< -> <FALSE> }T
+    T{ -1 0< -> <TRUE> }T
+    T{ 1 0< -> <FALSE> }T
+
+    T{ 0 1 < -> <TRUE> }T
+    T{ 1 2 < -> <TRUE> }T
+    T{ -1 0 < -> <TRUE> }T
+    T{ -1 1 < -> <TRUE> }T
+    T{ 0 0 < -> <FALSE> }T
+    T{ 1 1 < -> <FALSE> }T
+    T{ 1 0 < -> <FALSE> }T
+    T{ 2 1 < -> <FALSE> }T
+    T{ 0 -1 < -> <FALSE> }T
+    T{ 1 -1 < -> <FALSE> }T
+
+    T{ 0 1 > -> <FALSE> }T
+    T{ 1 2 > -> <FALSE> }T
+    T{ -1 0 > -> <FALSE> }T
+    T{ -1 1 > -> <FALSE> }T
+    T{ 0 0 > -> <FALSE> }T
+    T{ 1 1 > -> <FALSE> }T
+    T{ 1 0 > -> <TRUE> }T
+    T{ 2 1 > -> <TRUE> }T
+    T{ 0 -1 > -> <TRUE> }T
+    T{ 1 -1 > -> <TRUE> }T
+
+    T{ 0 1 MIN -> 0 }T
+    T{ 1 2 MIN -> 1 }T
+    T{ -1 0 MIN -> -1 }T
+    T{ -1 1 MIN -> -1 }T
+
+    T{ 0 0 MIN -> 0 }T
+    T{ 1 1 MIN -> 1 }T
+    T{ 1 0 MIN -> 0 }T
+    T{ 2 1 MIN -> 1 }T
+    T{ 0 -1 MIN -> -1 }T
+    T{ 1 -1 MIN -> -1 }T
+
+    T{ 0 1 MAX -> 1 }T
+    T{ 1 2 MAX -> 2 }T
+    T{ -1 0 MAX -> 0 }T
+    T{ -1 1 MAX -> 1 }T
+    T{ 0 0 MAX -> 0 }T
+    T{ 1 1 MAX -> 1 }T
+    T{ 1 0 MAX -> 1 }T
+    T{ 2 1 MAX -> 2 }T
+    T{ 0 -1 MAX -> 0 }T
+    T{ 1 -1 MAX -> 1 }T
+
+   T{ 1 2 2DROP -> }T
+    T{ 1 2 2DUP -> 1 2 1 2 }T
+    T{ 0 ?DUP -> 0 }T
+    T{ 1 ?DUP -> 1 1 }T
+    T{ -1 ?DUP -> -1 -1 }T
+(   T{ DEPTH -> 0 }T
+    T{ 0 DEPTH -> 0 1 }T
+    T{ 0 1 DEPTH -> 0 1 2 }T    )
+    T{ 0 DROP -> }T
+    T{ 1 2 DROP -> 1 }T
+    T{ 1 DUP -> 1 1 }T
+    T{ 1 2 OVER -> 1 2 1 }T
+    T{ 1 2 3 ROT -> 2 3 1 }T
+    T{ 1 2 SWAP -> 2 1 }T 
+
+    T{ : GR1 >R R> ; -> }T
+
+    T{ 123 GR1 -> 123 }T
+
+    T{ 1S GR1 -> 1S }T   ( RETURN STACK HOLDS CELLS )
+
+    T{ 0 5 + -> 5 }T
+    T{ 5 0 + -> 5 }T
+    T{ 0 -5 + -> -5 }T
+    T{ -5 0 + -> -5 }T
+    T{ 1 2 + -> 3 }T
+    T{ 1 -2 + -> -1 }T
+    T{ -1 2 + -> 1 }T
+    T{ -1 -2 + -> -3 }T
+    T{ -1 1 + -> 0 }T
+
+    T{ 0 5 - -> -5 }T
+    T{ 5 0 - -> 5 }T
+    T{ 0 -5 - -> 5 }T
+    T{ -5 0 - -> -5 }T
+    T{ 1 2 - -> -1 }T
+    T{ 1 -2 - -> 3 }T
+    T{ -1 2 - -> -3 }T
+    T{ -1 -2 - -> 1 }T
+    T{ 0 1 - -> -1 }T
+
+    T{ 0 1+ -> 1 }T
+    T{ -1 1+ -> 0 }T
+    T{ 1 1+ -> 2 }T
+
+    T{ 2 1- -> 1 }T
+    T{ 1 1- -> 0 }T
+    T{ 0 1- -> -1 }T
+
+    T{ 0 NEGATE -> 0 }T
+    T{ 1 NEGATE -> -1 }T
+    T{ -1 NEGATE -> 1 }T
+    T{ 2 NEGATE -> -2 }T
+    T{ -2 NEGATE -> 2 }T
+    
+TEND
+
+
+
+
+
+
+
 
 
 
@@ -2060,11 +2265,10 @@ forth.input(`
 : BAR  MARGIN 5 STARS ;
 : F    BAR BLIP BAR BLIP BLIP CR ;
 
-: TEST 4 0  do I . I' . ." hello"  CR 2 +loop ; 
+: TEST 4 0  do I . I' . ." hello"  CR 2 +LOOP ; 
 
 : TEST 10 0 DO I DUP . 5 = IF LEAVE THEN LOOP ; 
 
- 
 
 ( ." FINISHED" CR )
 
