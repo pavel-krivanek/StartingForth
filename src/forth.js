@@ -138,7 +138,7 @@ class Forth {
         let aSet = this.unknownLabels[aLabel];
         if (aSet === undefined) {
             aSet = new Set();
-            this.unknownLabels[aLabel] =  aSet }
+            this.unknownLabels[aLabel] = aSet }
         aSet.add(address);            
     }
     addressForLabelInFutureSet(aLabel, anAddress) { 
@@ -1139,7 +1139,9 @@ class ForthCodeInterpret extends ForthCodeWithHead {
                 interpretIsLit = true;
                 aCodeword = this.forth.addressForLabel('codeword_LIT');
             } else {
-                throw new Error( "unknown word: " + toFind.toByteString() );
+                typeError("unknown word: " + toFind.toByteString());
+                return;
+                //throw new Error( "unknown word: " + toFind.toByteString() );
             }         
         } else {
             aCodeword = this.forth.codewordOf(resultOfFind);
@@ -2079,6 +2081,13 @@ function addchar(char)
         forth.makeRunning();
         forth.run();
     }
+}
+
+function typeError(aString)
+{
+    for (let i = 0; i < aString.length; i++)
+        typeCharacter(aString.charCodeAt(i));
+        typeCharacter(13);
 }
 
 function specialchar(char)
