@@ -1651,7 +1651,7 @@ forth.input(`
 
 : DEPTH		( -- n )
 	S0 @ DSP@ -
-	2-			( adjust because S0 was on the stack when we pushed DSP )
+	2- 2 /			( adjust because S0 was on the stack when we pushed DSP )
 ;
 
 : ALIGNED	( addr -- addr )
@@ -2054,7 +2054,7 @@ forth.input(`
  DUP 0 >
  WHILE
  SWAP R> HASH >R
- 2-
+ 1-
  REPEAT
  DROP R>
 ;
@@ -2191,9 +2191,9 @@ TSTART
     T{ 0 ?DUP -> 0 }T
     T{ 1 ?DUP -> 1 1 }T
     T{ -1 ?DUP -> -1 -1 }T
-(   T{ DEPTH -> 0 }T
+    T{ DEPTH -> 0 }T
     T{ 0 DEPTH -> 0 1 }T
-    T{ 0 1 DEPTH -> 0 1 2 }T    )
+    T{ 0 1 DEPTH -> 0 1 2 }T    
     T{ 0 DROP -> }T
     T{ 1 2 DROP -> 1 }T
     T{ 1 DUP -> 1 1 }T
@@ -2245,16 +2245,6 @@ TEND
 
 
 
-
-
-
-
-
-
-
-
-
-
 ." READY" CR
 
 
@@ -2268,7 +2258,6 @@ TEND
 : TEST 4 0  do I . I' . ." hello"  CR 2 +LOOP ; 
 
 : TEST 10 0 DO I DUP . 5 = IF LEAVE THEN LOOP ; 
-
 
 ( ." FINISHED" CR )
 
