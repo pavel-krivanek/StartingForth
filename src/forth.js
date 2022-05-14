@@ -276,6 +276,7 @@ class Forth {
         do {
             if (this.inputBufferEmpty()) {
                 this.noInput();
+                typeOk();
                 return [this.wordBufferAddress(), 0];
             }
             charCode = this.readInputBuffer();
@@ -1153,7 +1154,6 @@ class ForthCodeInterpret extends ForthCodeWithHead {
                 typeError("Unknown word: " + toFind.toByteString());
                 this.forth.emergencyStop();
                 return;
-                //throw new Error( "unknown word: " + toFind.toByteString() );
             }         
         } else {
             aCodeword = this.forth.codewordOf(resultOfFind);
@@ -1162,18 +1162,18 @@ class ForthCodeInterpret extends ForthCodeWithHead {
                 executeImmediate = true;
         }
         if ((this.forth.varStateValue() === 0) || executeImmediate) {
-        if (interpretIsLit) {
-                this.memory().push(numberErrorPair[0]);
-                this.forth.privNext(); 
-            } else { 
-                this.forth.pc = this.memory().wordAt(aCodeword) - 1;    
-        } } else {
-                this.forth.privComma(aCodeword);
-                if (interpretIsLit) 
-                    this.forth.privComma(numberErrorPair[0]);
-                this.privNex;
-            }
-        
+            if (interpretIsLit) {
+                    this.memory().push(numberErrorPair[0]);
+                    this.forth.privNext(); 
+                } else { 
+                    this.forth.pc = this.memory().wordAt(aCodeword) - 1;    
+            } 
+        } else {
+            this.forth.privComma(aCodeword);
+            if (interpretIsLit) 
+                this.forth.privComma(numberErrorPair[0]);
+            this.privNex;
+        }
     }
 }
 
@@ -2186,7 +2186,7 @@ TSTART
     T{ 0 -1 MAX -> 0 }T
     T{ 1 -1 MAX -> 1 }T
 
-   T{ 1 2 2DROP -> }T
+    T{ 1 2 2DROP -> }T
     T{ 1 2 2DUP -> 1 2 1 2 }T
     T{ 0 ?DUP -> 0 }T
     T{ 1 ?DUP -> 1 1 }T
@@ -2245,7 +2245,7 @@ TEND
 
 
 
-." READY" CR
+ ."  "
 
 
 : STAR 42 EMIT ;
@@ -2279,12 +2279,13 @@ console.log("finished!");
 
 function addchar(char)
 {
-    typeCharacter(char);
     forth.inputBuffer.push(char & 0xFF);
     if (char === 13) {
-        console.log("run");
+        typeCharacter(32);
         forth.makeRunning();
         forth.run();
+    } else {
+        typeCharacter(char);
     }
 }
 
@@ -2293,6 +2294,11 @@ function typeError(aString)
     for (let i = 0; i < aString.length; i++)
         typeCharacter(aString.charCodeAt(i));
     typeCharacter(13);
+}
+
+function typeOk()
+{
+    typeError("OK");
 }
 
 function specialchar(char)
