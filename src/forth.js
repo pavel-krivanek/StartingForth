@@ -2383,33 +2383,69 @@ TSTART
     T{ -1 1+ -> 0 }T
     T{ 1 1+ -> 2 }T
     T{ MID-UINT 1+ -> MID-UINT+1 }T
-
-    T{ 0 1+ -> 1 }T
-    T{ -1 1+ -> 0 }T
-    T{ 1 1+ -> 2 }T
-    T{ MID-UINT 1+ -> MID-UINT+1 }T
-
+    
+    T{ 2 1- -> 1 }T
+    T{ 1 1- -> 0 }T
+    T{ 0 1- -> -1 }T
+    T{ MID-UINT+1 1- -> MID-UINT }T
+    
     T{ 0 NEGATE -> 0 }T
     T{ 1 NEGATE -> -1 }T
     T{ -1 NEGATE -> 1 }T
     T{ 2 NEGATE -> -2 }T
     T{ -2 NEGATE -> 2 }T
-
+    
     T{ 0 ABS -> 0 }T
     T{ 1 ABS -> 1 }T
     T{ -1 ABS -> 1 }T
-    T{ MIN-INT ABS -> MID-UINT+1 }T 
+    T{ MIN-INT ABS -> MID-UINT+1 }T
 
-    T{ 1 2 3 4 2OVER -> 1 2 3 4 1 2 }T
-    T{ 1 2 3 4 2SWAP -> 3 4 1 2 }T
+    (
+        T{ 0 S>D -> 0 0 }T
+        T{ 1 S>D -> 1 0 }T
+        T{ 2 S>D -> 2 0 }T
+        T{ -1 S>D -> -1 -1 }T
+        T{ -2 S>D -> -2 -1 }T
+        T{ MIN-INT S>D -> MIN-INT -1 }T
+        T{ MAX-INT S>D -> MAX-INT 0 }T
 
-    T{ 1 2 DROP -> 1 }T
-    T{ 1 2 SWAP -> 2 1 }T
+        T{ 0 0 M* -> 0 S>D }T
+        T{ 0 1 M* -> 0 S>D }T
+        T{ 1 0 M* -> 0 S>D }T
+        T{ 1 2 M* -> 2 S>D }T
+        T{ 2 1 M* -> 2 S>D }T
+        T{ 3 3 M* -> 9 S>D }T
+        T{ -3 3 M* -> -9 S>D }T
+        T{ 3 -3 M* -> -9 S>D }T
+        T{ -3 -3 M* -> 9 S>D }T
+        T{ 0 MIN-INT M* -> 0 S>D }T
+        T{ 1 MIN-INT M* -> MIN-INT S>D }T
+        T{ 2 MIN-INT M* -> 0 1S }T
+        T{ 0 MAX-INT M* -> 0 S>D }T
+        T{ 1 MAX-INT M* -> MAX-INT S>D }T
+        T{ 2 MAX-INT M* -> MAX-INT 1 LSHIFT 0 }T
+        T{ MIN-INT MIN-INT M* -> 0 MSB 1 RSHIFT }T
+        T{ MAX-INT MIN-INT M* -> MSB MSB 2/ }T
+        T{ MAX-INT MAX-INT M* -> 1 MSB 2/ INVERT }T
+    )
+
+    T{ 0 0 * -> 0 }T          
+    T{ 0 1 * -> 0 }T
+    T{ 1 0 * -> 0 }T
+    T{ 1 2 * -> 2 }T
+    T{ 2 1 * -> 2 }T
+    T{ 3 3 * -> 9 }T
+    T{ -3 3 * -> -9 }T
+    T{ 3 -3 * -> -9 }T
+    T{ -3 -3 * -> 9 }T
+
+    T{ MID-UINT+1 1 RSHIFT 2 * -> MID-UINT+1 }T
+    T{ MID-UINT+1 2 RSHIFT 4 * -> MID-UINT+1 }T
+    T{ MID-UINT+1 1 RSHIFT MID-UINT+1 OR 2 * -> MID-UINT+1 }T
+
 
     DECIMAL
 TEND
-
-
 
  ."  "
 
