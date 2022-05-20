@@ -16,7 +16,7 @@ class ForthMemory {
     resetStack() { this.dsp = this.s0(); }
     resetReturnStack() { this.rsp = this.r0(); }
     s0() { return 0xEFFC; }
-    r0() { return 0x7FFC; }
+    r0() { return 0xDFFC; }
 
     memoryAt(address) { return this.memory[address]; }
     memoryAtPut(address, value) { return this.memory[address] = value; }
@@ -92,6 +92,9 @@ Number.prototype.asUnsigned4Bytes = function() {
     let num = this.asUnsigned32();
     console.log("unsigned: "+num);
     return [ (num & 0xFF000000) >>> 24, (num & 0xFF0000) >>> 16, (num & 0xFF00) >>> 8, num & 0xFF ];  
+}
+Number.prototype.numberValue = function() {
+    return this; 
 }
 Array.prototype.asUnsigned16 = function() {
     return (this[1]+(this[0] << 8));
@@ -540,14 +543,14 @@ class ForthCode {
     }
     pushBytes(bytes) { this.forth.memory.push(bytes); }
     push(number) { 
-        if (number.asUnsigned2Bytes===undefined) debugger;
-        this.forth.memory.push(number.asUnsigned2Bytes()); }
+        this.forth.memory.push(number.numberValue().asUnsigned2Bytes()); }
     pop() { return this.forth.memory.pop(); }
     popSigned() { return this.pop().asSigned16(); }
     popUnsigned() { return this.pop().asUnsigned16(); }
     memory() { return this.forth.memory; }
     true() { return 0xFFFF; }
     false() { return 0; }
+    numberValue() { return 0; }
 }
 
 class ForthCodeWithHead extends ForthCode {
@@ -592,7 +595,7 @@ class ForthCodeWithHead extends ForthCode {
 
 class ForthCodeWithHeadCompiled extends ForthCodeWithHead {
     codewordFor(position) { return this.forth.addressForLabel("DOCOL"); }
-    codewordLabels() { throw new Error("subclassREsponsibility"); }
+    codewordLabels() { throw new Error("subclassResponsibility"); }
     execute() { /* do nothing here */ }
     finishAt(originalPosition) { return originalPosition }
     writeCodeAt(originalPosition) {
@@ -613,7 +616,7 @@ class ForthCodeWithHeadCompiled extends ForthCodeWithHead {
 class ForthCodeDoCol extends ForthCode {
     execute() {
         this.forth.memory.pushAddressToReturnStack(this.forth.pcNext);
-        this.forth.pcCurrent += this.forth.wordSize();
+        this.forth.pcCurrent += this.forth.wordSize();  // set to the codeword
         this.forth.pcNext = this.forth.pcCurrent;
     }
 }
@@ -1270,8 +1273,14 @@ class ForthCodeCCopy extends ForthCodeWithHead {
 class ForthCodeCMove extends ForthCodeWithHead {
     name() { return "cmove"; }
     execute() {
-        throw new Error("shouldBeImplemented");
-    }
+        let length = this.popUnsigned();
+        let destination = this.popUnsigned();
+        let source = this.popUnsigned();
+        for (let i = 0; i < length; i++)
+        {
+            this.forth.memory.memoryAtPut(destination + i, this.forth.memory.memoryAt(source + i))
+        }
+     }
 }
 
 class ForthCodeFetch extends ForthCodeWithHead {
@@ -1345,7 +1354,7 @@ class ForthCodeWord extends ForthCodeWithHead {
         this.push(addressLengthPair[0]);
         this.push(addressLengthPair[1]);
     }
-} 
+}
 
 // Return stack primitives
 
@@ -1886,6 +1895,7 @@ forth.input(`
 ;
 
 : DUMP		( addr len -- )
+    CR
 	BASE @ -ROT		( save the current BASE at the bottom of the stack )
 	HEX			( and switch to hexadecimal mode )
 
@@ -2102,9 +2112,43 @@ forth.input(`
 : MAX 2DUP > IF DROP ELSE SWAP DROP THEN ;
 : MIN 2DUP > IF SWAP DROP ELSE DROP THEN ;
 
+HEX
+DFFC CONSTANT PAD
+DECIMAL
+
+: LEAVE R> R> R> DROP DUP >R >R >R ;
+: -ROT ROT ROT ;
+: FILL          ( A C V )
+    SWAP        ( A V C )
+    BEGIN 
+        DUP 0> 
+    WHILE
+        1-      ( A V C )
+        -ROT    ( C A V )
+        2DUP    ( C A V A V )
+        SWAP    ( C A V V A )
+        C!      ( C A V )
+        SWAP 1+ SWAP
+        ROT     ( A V C )
+    REPEAT 
+    2DROP DROP
+    ; 
+  
+    : COUNT DUP 1+ SWAP C@ ;
+    : TEXT PAD 72 32 FILL WORD  ( A L )
+    DUP -ROT                    ( L A L )
+    PAD                         ( L A L PAD )
+    SWAP                        ( L A PAD L )
+    CMOVE                       ( L )
+    PAD SWAP                    ( PAD L )
+    ;
+ 
 : PAGE CR 34 0 DO  ." - " LOOP ." -" CR ; 
 
-( ---------------- )
+
+( --------------------------------------------------------------------- )
+
+: TESTING ; ( will be forgotten )
 
 : HASH
  SWAP 1+ XOR
@@ -2447,9 +2491,6 @@ TSTART
     DECIMAL
 TEND
 
- ."  "
-
-
 : STAR 42 EMIT ;
 : STARS   0 DO STAR  LOOP ;
 : MARGIN  CR 30 SPACES ;
@@ -2460,6 +2501,10 @@ TEND
 : TEST 4 0  do I . I' . ." hello"  CR 2 +LOOP ; 
 
 : TEST 10 0 DO I DUP . 5 = IF LEAVE THEN LOOP ; 
+
+FORGET TESTING
+
+ ."  "
 
 ( ." FINISHED" CR )
 
