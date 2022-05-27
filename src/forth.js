@@ -366,8 +366,9 @@ class ForthMemoryInitializer {
 class ForthStandardMemoryInitializer extends ForthMemoryInitializer {
     initializeMemory() {
         this.forth.memory.resetMemory();
-        this.addCode(new ForthCodeDoCol(this.forth))
-        this.addCode(new ForthCodeNext(this.forth))
+        this.addCode(new ForthCodeDoCol(this.forth));
+        this.addCode(new ForthCodeNext(this.forth));
+        this.addCode(new ForthCodeDoDoes(this.forth));
         this.initializeBasicPrimitives();
         this.initializeComparisonPrimitives();
         this.initializeBitwisePrimitives();
@@ -427,6 +428,7 @@ class ForthStandardMemoryInitializer extends ForthMemoryInitializer {
     initializeBuitInConstants() { 
         this.addCode(new ForthCodeConstant(this.forth, "VERSION", 7));
         this.addCode(new ForthCodeConstant(this.forth, "DOCOL", this.forth.labels["DOCOL"]));
+        this.addCode(new ForthCodeConstant(this.forth, "DODOES", this.forth.labels["DODOES"]));
         this.addCode(new ForthCodeConstant(this.forth, "F_LENMASK", this.forth.flagLengthMask()));
         this.addCode(new ForthCodeConstant(this.forth, "F_HIDDEN", this.forth.flagHidden()));
         this.addCode(new ForthCodeConstant(this.forth, "F_IMMED", this.forth.flagImmediate()));
@@ -461,7 +463,7 @@ class ForthStandardMemoryInitializer extends ForthMemoryInitializer {
         ForthCodeTick
         ]); } 
     initializeCompilingPrimitives() { this.installAll([
-        ForthCodeCreate,
+        ForthCodeCreateHead,
         ForthCodeComma,
         ForthCodeLBrac,
         ForthCodeRBrac,
@@ -618,6 +620,20 @@ class ForthCodeDoCol extends ForthCode {
         this.forth.memory.pushAddressToReturnStack(this.forth.pcNext);
         this.forth.pcCurrent += this.forth.wordSize();  // set to the codeword
         this.forth.pcNext = this.forth.pcCurrent;
+    }
+}
+
+class ForthCodeDoDoes extends ForthCode {
+    execute() {
+        this.forth.memory.pushAddressToReturnStack(this.forth.pcNext);
+        let refAddress = this.forth.pcCurrent + this.forth.wordSize(); 
+        let aPFA = refAddress + this.forth.wordSize();
+        let codeAddress = this.forth.memory.memoryCopyFromTo(refAddress, refAddress+1).asUnsigned16();
+        let codewordAddress = this.forth.memory.memoryCopyFromTo(codeAddress, codeAddress+1).asUnsigned16();
+        this.forth.pcCurrent = codeAddress ; 
+        this.forth.pcNext = this.forth.pcCurrent;
+        this.forth.memory.push(aPFA.asUnsigned2Bytes());
+        this.forth.privNext();
     }
 }
 
@@ -1035,7 +1051,7 @@ class ForthCodeTick extends ForthCodeWithHead {
 
 class ForthCodeColon extends ForthCodeWithHeadCompiled {
     name() { return ":"; }
-    codewordLabels() { return ["WORD", "CREATE", "LIT", "DOCOL", "COMMA", "LATEST", "FETCH", "HIDDEN", "RBRAC", "EXIT"]}
+    codewordLabels() { return ["WORD", "CREATEHEAD", "LIT", "DOCOL", "COMMA", "LATEST", "FETCH", "HIDDEN", "RBRAC", "EXIT"]}
 }
 
 class ForthCodeComma extends ForthCodeWithHead {
@@ -1045,8 +1061,8 @@ class ForthCodeComma extends ForthCodeWithHead {
     }
 }
 
-class ForthCodeCreate extends ForthCodeWithHead {
-    name() { return "create"; }
+class ForthCodeCreateHead extends ForthCodeWithHead {
+    name() { return "createhead"; }
     execute() {
         let length = this.popSigned();
         let nameAddress = this.popUnsigned();
@@ -1786,7 +1802,7 @@ forth.input(`
 
 : CONSTANT
 	WORD		( get the name (the name follows CONSTANT) )
-	CREATE		( make the dictionary entry )
+	CREATEHEAD  ( make the dictionary entry )
 	DOCOL ,		( append DOCOL (the codeword field of this word) )
 	' LIT ,		( append the codeword LIT )
 	,		( append the value on the top of the stack )
@@ -1804,7 +1820,7 @@ forth.input(`
 
 : VARIABLE
 	1 CELLS ALLOT	( allocate 1 cell of memory, push the pointer to this memory )
-	WORD CREATE	( make the dictionary entry (the name follows VARIABLE) )
+	WORD CREATEHEAD	( make the dictionary entry (the name follows VARIABLE) )
 	DOCOL ,		( append DOCOL (the codeword field of this word) )
 	' LIT ,		( append the codeword LIT )
 	,		( append the pointer to the new memory )
@@ -1812,7 +1828,7 @@ forth.input(`
 ;
 
 : VALUE		( n -- )
-	WORD CREATE	( make the dictionary entry (the name follows VALUE) )
+	WORD CREATEHEAD	( make the dictionary entry (the name follows VALUE) )
 	DOCOL ,		( append DOCOL )
 	' LIT ,		( append the codeword LIT )
 	,		( append the initial value )
@@ -2078,7 +2094,7 @@ forth.input(`
 
 
 : :NONAME
-	0 0 CREATE	( create a word with no name - we need a dictionary header because ; expects it )
+	0 0 CREATEHEAD	( create a word with no name - we need a dictionary header because ; expects it )
 	HERE @		( current HERE value is the address of the codeword, ie. the xt )
 	DOCOL ,		( compile DOCOL (the codeword) )
 	]		( go into compile mode )
@@ -2145,6 +2161,23 @@ DECIMAL
  
 : PAGE CR 34 0 DO  ." - " LOOP ." -" CR ; 
 
+: CREATE 
+    WORD CREATEHEAD DODOES , 0 ,
+;
+
+: DOES> IMMEDIATE
+    ['] LIT , HERE @ 6 CELLS + , ['] LATEST , ['] @ , ['] >DFA , ['] ! , ['] EXIT ,
+;
+
+(
+    : CONST CREATE , DOES> @ ;
+
+42 CONST MYCONST 
+43 CONST MYCONST2 
+
+MYCONST .
+MYCONST2 . 
+)
 
 ( --------------------------------------------------------------------- )
 
