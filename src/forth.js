@@ -35,7 +35,7 @@ class ForthMemory {
         return result; 
     }
     push(bytes) { 
-        this.dsp = this.dsp - 2;
+        this.dsp = this.dsp - bytes.length;
         bytes.forEach((each, index) => {
             this.memoryAtPut(this.dsp+index, each)
         });
@@ -90,7 +90,6 @@ Number.prototype.asUnsigned2Bytes = function() {
 }
 Number.prototype.asUnsigned4Bytes = function() {
     let num = this.asUnsigned32();
-    console.log("unsigned: "+num);
     return [ (num & 0xFF000000) >>> 24, (num & 0xFF0000) >>> 16, (num & 0xFF00) >>> 8, num & 0xFF ];  
 }
 Number.prototype.numberValue = function() {
@@ -259,7 +258,6 @@ class Forth {
         let anInteger = parseInt(toParse.toByteString(), base);
         if (isDouble) {
             anInteger = anInteger.asUnsigned4Bytes();
-            console.log(anInteger);
         } else 
             anInteger = anInteger.asUnsigned2Bytes();
         
@@ -861,9 +859,6 @@ class ForthCodeInvert extends ForthCodeWithHead {
     execute() {
 
         let a = this.popUnsigned();
-        console.log("invert");
-        console.log(a);
-        console.log(~a);
         this.push(~a);
     }
 }
@@ -2004,7 +1999,6 @@ forth.input(`
 	0		( sorry, nothing found )
 ;
 
-( TODO: SEE )
 : SEE
 	WORD FIND	( find the dictionary entry to decompile )
 
@@ -2169,15 +2163,8 @@ DECIMAL
     ['] LIT , HERE @ 6 CELLS + , ['] LATEST , ['] @ , ['] >DFA , ['] ! , ['] EXIT ,
 ;
 
-(
-    : CONST CREATE , DOES> @ ;
+: 2CONSTANT CREATE , , DOES> DUP 2+ @ SWAP @ ;
 
-42 CONST MYCONST 
-43 CONST MYCONST2 
-
-MYCONST .
-MYCONST2 . 
-)
 
 ( --------------------------------------------------------------------- )
 
@@ -2519,7 +2506,13 @@ TSTART
     T{ MID-UINT+1 1 RSHIFT 2 * -> MID-UINT+1 }T
     T{ MID-UINT+1 2 RSHIFT 4 * -> MID-UINT+1 }T
     T{ MID-UINT+1 1 RSHIFT MID-UINT+1 OR 2 * -> MID-UINT+1 }T
-
+ 
+    DECIMAL 
+  
+    131071. 2CONSTANT MY2CONST
+ 
+    T{ MY2CONST -> 1 -1 }T
+    HEX
 
     DECIMAL
 TEND
@@ -2545,10 +2538,7 @@ FORGET TESTING
 //val = forth.memory;
 forth.run();
 val = forth.outputBufferoutputBufferString();
-console.log(val);
 val = forth.memory.memoryCopyFromTo(forth.memory.dsp, forth.memory.s0()-1);
-
-console.log(val);
 
 //val = forth.memory.memoryCopyFromTo(1018, 1050);
 //console.log(val);
