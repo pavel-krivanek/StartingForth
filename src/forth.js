@@ -2163,7 +2163,13 @@ DECIMAL
     ['] LIT , HERE @ 6 CELLS + , ['] LATEST , ['] @ , ['] >DFA , ['] ! , ['] EXIT ,
 ;
 
-: 2CONSTANT CREATE , , DOES> DUP 2+ @ SWAP @ ;
+: 2@ DUP 2+ @ SWAP @ ;
+: 2! TUCK 2+ ! ! ;
+
+: 2CONSTANT CREATE , , DOES> 2@ ;
+: 2VARIABLE CREATE , , DOES> ;
+
+
 
 
 ( --------------------------------------------------------------------- )
@@ -2507,11 +2513,41 @@ TSTART
     T{ MID-UINT+1 2 RSHIFT 4 * -> MID-UINT+1 }T
     T{ MID-UINT+1 1 RSHIFT MID-UINT+1 OR 2 * -> MID-UINT+1 }T
  
+    T{ DECIMAL 131071. HEX 2CONSTANT 2c0 -> }T
+    T{ 2c0 -> 1 -1 }T
+ 
+    T{ 1 2 2CONSTANT 2c1 -> }T
+    T{ 2c1 -> 1 2 }T
+    T{ : cd1 2c1 ; -> }T
+    T{ cd1 -> 1 2 }T
+    
+    T{ : cd2 2CONSTANT ; -> }T
+    T{ -1 -2 cd2 2c2 -> }T
+    T{ 2c2 -> -1 -2 }T
+    
+    (
+        T{ 4 5 2CONSTANT 2c3 IMMEDIATE 2c3 -> 4 5 }T
+        T{ : cd6 2c3 2LITERAL ; cd6 -> 4 5 }T
+    )
+
+    
+
+    T{ 2VARIABLE 2v1 -> }T
+    T{ 0. 2v1 2! ->    }T
+    T{    2v1 2@ -> 0. }T
+    T{ -1 -2 2v1 2! ->       }T
+    T{       2v1 2@ -> -1 -2 }T
+    T{ : cd2 2VARIABLE ; -> }T
+    T{ cd2 2v2 -> }T
+    T{ : cd3 2v2 2! ; -> }T
+    T{ -2 -1 cd3 -> }T
+    T{ 2v2 2@ -> -2 -1 }T    
+    T{ 2VARIABLE 2v3 IMMEDIATE 5 6 2v3 2! -> }T
+    T{ 2v3 2@ -> 5 6 }T
+    
     DECIMAL 
   
-    131071. 2CONSTANT MY2CONST
- 
-    T{ MY2CONST -> 1 -1 }T
+
     HEX
 
     DECIMAL
