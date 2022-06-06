@@ -408,6 +408,8 @@ class ForthStandardMemoryInitializer extends ForthMemoryInitializer {
         ForthCodeAdd,
         ForthCodeSub,
         ForthCodeMul,
+        ForthCodeMMul,
+        ForthCodeUMMul,
         ForthCodeDivMod,
         ForthCodeUDivMod,
         ForthCodeLShift,
@@ -544,6 +546,8 @@ class ForthCode {
     pushBytes(bytes) { this.forth.memory.push(bytes); }
     push(number) { 
         this.forth.memory.push(number.numberValue().asUnsigned2Bytes()); }
+    push2(number) { 
+        this.forth.memory.push(number.numberValue().asUnsigned4Bytes()); }
     pop() { return this.forth.memory.pop(); }
     popSigned() { return this.pop().asSigned16(); }
     popUnsigned() { return this.pop().asUnsigned16(); }
@@ -744,6 +748,20 @@ class ForthCodeMul extends ForthCodeWithHead {
     name() { return "*"; }
     execute() {
         this.push(this.popSigned() * this.popSigned());
+    }
+}
+
+class ForthCodeMMul extends ForthCodeWithHead {
+    name() { return "M*"; }
+    execute() {
+        this.push2(this.popSigned() * this.popSigned());
+    }
+}
+
+class ForthCodeUMMul extends ForthCodeWithHead {
+    name() { return "UM*"; }
+    execute() {
+        this.push2(this.popUnsigned() * this.popUnsigned());
     }
 }
 
@@ -2169,8 +2187,7 @@ DECIMAL
 : 2CONSTANT CREATE , , DOES> 2@ ;
 : 2VARIABLE CREATE , , DOES> ;
 
-
-
+: S>D DUP 0< IF -1 ELSE 0 THEN SWAP ;
 
 ( --------------------------------------------------------------------- )
 
@@ -2470,34 +2487,45 @@ TSTART
     T{ -1 ABS -> 1 }T
     T{ MIN-INT ABS -> MID-UINT+1 }T
 
-    (
-        T{ 0 S>D -> 0 0 }T
-        T{ 1 S>D -> 1 0 }T
-        T{ 2 S>D -> 2 0 }T
-        T{ -1 S>D -> -1 -1 }T
-        T{ -2 S>D -> -2 -1 }T
-        T{ MIN-INT S>D -> MIN-INT -1 }T
-        T{ MAX-INT S>D -> MAX-INT 0 }T
+    T{ 0 S>D -> 0 0 }T
+    T{ 1 S>D -> 1 0 }T
+    T{ 2 S>D -> 2 0 }T
+    T{ -1 S>D -> -1 -1 }T
+    T{ -2 S>D -> -2 -1 }T
+    T{ MIN-INT S>D -> MIN-INT -1 }T
+    T{ MAX-INT S>D -> MAX-INT 0 }T
+    
+    T{ 0 0 M* -> 0 S>D }T
+    T{ 0 1 M* -> 0 S>D }T
+    T{ 1 0 M* -> 0 S>D }T
+    T{ 1 2 M* -> 2 S>D }T
+    T{ 2 1 M* -> 2 S>D }T
+    T{ 3 3 M* -> 9 S>D }T
+    T{ -3 3 M* -> -9 S>D }T
+    T{ 3 -3 M* -> -9 S>D }T
+    T{ -3 -3 M* -> 9 S>D }T
+    T{ 0 MIN-INT M* -> 0 S>D }T
+    T{ 1 MIN-INT M* -> MIN-INT S>D }T
+    T{ 2 MIN-INT M* -> 0 1S }T
+    T{ 0 MAX-INT M* -> 0 S>D }T
+    T{ 1 MAX-INT M* -> MAX-INT S>D }T
+    T{ 2 MAX-INT M* -> MAX-INT 1 LSHIFT 0 }T
+    T{ MIN-INT MIN-INT M* -> 0 MSB 1 RSHIFT }T
+    T{ MAX-INT MIN-INT M* -> MSB MSB 2/ }T
+    T{ MAX-INT MAX-INT M* -> 1 MSB 2/ INVERT }T
 
-        T{ 0 0 M* -> 0 S>D }T
-        T{ 0 1 M* -> 0 S>D }T
-        T{ 1 0 M* -> 0 S>D }T
-        T{ 1 2 M* -> 2 S>D }T
-        T{ 2 1 M* -> 2 S>D }T
-        T{ 3 3 M* -> 9 S>D }T
-        T{ -3 3 M* -> -9 S>D }T
-        T{ 3 -3 M* -> -9 S>D }T
-        T{ -3 -3 M* -> 9 S>D }T
-        T{ 0 MIN-INT M* -> 0 S>D }T
-        T{ 1 MIN-INT M* -> MIN-INT S>D }T
-        T{ 2 MIN-INT M* -> 0 1S }T
-        T{ 0 MAX-INT M* -> 0 S>D }T
-        T{ 1 MAX-INT M* -> MAX-INT S>D }T
-        T{ 2 MAX-INT M* -> MAX-INT 1 LSHIFT 0 }T
-        T{ MIN-INT MIN-INT M* -> 0 MSB 1 RSHIFT }T
-        T{ MAX-INT MIN-INT M* -> MSB MSB 2/ }T
-        T{ MAX-INT MAX-INT M* -> 1 MSB 2/ INVERT }T
-    )
+    T{ 0 0 UM* -> 0 0 }T
+    T{ 0 1 UM* -> 0 0 }T
+    T{ 1 0 UM* -> 0 0 }T
+    T{ 1 2 UM* -> 2 0 }T
+    T{ 2 1 UM* -> 2 0 }T
+    T{ 3 3 UM* -> 9 0 }T
+    T{ MID-UINT+1 1 RSHIFT 2 UM* ->  MID-UINT+1 0 }T
+    T{ MID-UINT+1          2 UM* ->           0 1 }T
+    T{ MID-UINT+1          4 UM* ->           0 2 }T
+    T{         1S          2 UM* -> 1S 1 LSHIFT 1 }T
+    T{   MAX-UINT   MAX-UINT UM* ->    1 1 INVERT }T
+    
 
     T{ 0 0 * -> 0 }T          
     T{ 0 1 * -> 0 }T
@@ -2544,7 +2572,7 @@ TSTART
     T{ 2v2 2@ -> -2 -1 }T    
     T{ 2VARIABLE 2v3 IMMEDIATE 5 6 2v3 2! -> }T
     T{ 2v3 2@ -> 5 6 }T
-    
+ 
     DECIMAL 
   
 
