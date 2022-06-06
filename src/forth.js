@@ -84,6 +84,9 @@ Number.prototype.asUnsigned32 = function() {
 Number.prototype.asSigned16 = function() {
     return this > 0x7FFF ? 0 - (((this & 0xFFFF) ^ 0xFFFF) + 1) : this ;     
 }
+Number.prototype.asSigned32 = function() {
+    return this > 0x7FFFFFFF ? 0 - (((this & 0xFFFFFFFF) ^ 0xFFFFFFFF) + 1) : this ;     
+}
 Number.prototype.asUnsigned2Bytes = function() {
     let num = this.asUnsigned16();
     return [ (num & 0xFF00) >>> 8, num & 0xFF ];  
@@ -103,6 +106,9 @@ Array.prototype.asUnsigned32 = function() {
 }
 Array.prototype.asSigned16 = function() {
     return this.asUnsigned16().asSigned16();
+}
+Array.prototype.asSigned32 = function() {
+    return this.asUnsigned32().asSigned32();
 }
 Array.prototype.isSameAs = function(anArray) {
     return (this.length === anArray.length)
@@ -412,6 +418,8 @@ class ForthStandardMemoryInitializer extends ForthMemoryInitializer {
         ForthCodeUMMul,
         ForthCodeDivMod,
         ForthCodeUDivMod,
+        ForthCodeMulDivMod,
+        ForthCodeFMDivMod,
         ForthCodeLShift,
         ForthCodeRShift
         ]); }
@@ -550,6 +558,7 @@ class ForthCode {
         this.forth.memory.push(number.numberValue().asUnsigned4Bytes()); }
     pop() { return this.forth.memory.pop(); }
     popSigned() { return this.pop().asSigned16(); }
+    popSigned32() { return this.forth.memory.pop(4).asSigned32(); }
     popUnsigned() { return this.pop().asUnsigned16(); }
     memory() { return this.forth.memory; }
     true() { return 0xFFFF; }
@@ -694,6 +703,30 @@ class ForthCodeUDivMod extends ForthCodeWithHead {
         let a = this.popUnsigned();
         this.push(a % b);
         this.push(Math.floor(a / b));
+    }
+}
+
+class ForthCodeMulDivMod extends ForthCodeWithHead {
+    name() { return "*/mod"; }
+    execute() {
+        let c = this.popSigned();
+        let b = this.popSigned();
+        let a = this.popSigned();
+        let mul = a * b;
+        let div = Math.floor(mul / c);
+        this.push(mul - (div * c ));
+        this.push(div);
+    }
+}
+
+class ForthCodeFMDivMod extends ForthCodeWithHead {
+    name() { return "fm/mod"; }
+    execute() {
+        let b = this.popSigned();
+        let a = this.popSigned32();
+        let div = Math.floor(a / b);
+        this.push(a - (div * b));
+        this.push(div);
     }
 }
 
@@ -2187,7 +2220,7 @@ DECIMAL
 : 2CONSTANT CREATE , , DOES> 2@ ;
 : 2VARIABLE CREATE , , DOES> ;
 
-: S>D DUP 0< IF -1 ELSE 0 THEN SWAP ;
+: S>D DUP 0< IF -1 ELSE 0 THEN ;
 
 ( --------------------------------------------------------------------- )
 
@@ -2572,6 +2605,63 @@ TSTART
     T{ 2v2 2@ -> -2 -1 }T    
     T{ 2VARIABLE 2v3 IMMEDIATE 5 6 2v3 2! -> }T
     T{ 2v3 2@ -> 5 6 }T
+
+    T{       0 S>D              1 FM/MOD ->  0       0 }T 
+    T{       1 S>D              1 FM/MOD ->  0       1 }T 
+    T{       2 S>D              1 FM/MOD ->  0       2 }T
+    T{      -1 S>D              1 FM/MOD ->  0      -1 }T
+    T{      -2 S>D              1 FM/MOD ->  0      -2 }T
+    T{       0 S>D             -1 FM/MOD ->  0       0 }T 
+    T{       1 S>D             -1 FM/MOD ->  0      -1 }T
+    T{       2 S>D             -1 FM/MOD ->  0      -2 }T
+    T{      -1 S>D             -1 FM/MOD ->  0       1 }T
+    T{      -2 S>D             -1 FM/MOD ->  0       2 }T
+    T{       2 S>D              2 FM/MOD ->  0       1 }T
+    T{      -1 S>D             -1 FM/MOD ->  0       1 }T 
+    T{      -2 S>D             -2 FM/MOD ->  0       1 }T 
+    T{       7 S>D              3 FM/MOD ->  1       2 }T 
+    T{       7 S>D             -3 FM/MOD -> -2      -3 }T 
+    T{      -7 S>D              3 FM/MOD ->  2      -3 }T
+    T{      -7 S>D             -3 FM/MOD -> -1       2 }T
+    T{ MAX-INT S>D              1 FM/MOD ->  0 MAX-INT }T
+    T{ MIN-INT S>D              1 FM/MOD ->  0 MIN-INT }T
+    T{ MAX-INT S>D        MAX-INT FM/MOD ->  0       1 }T
+    T{ MIN-INT S>D        MIN-INT FM/MOD ->  0       1 }T
+    T{    1S 1                  4 FM/MOD ->  3 MAX-INT }T
+    T{       1 MIN-INT M*       1 FM/MOD ->  0 MIN-INT }T
+    T{       1 MIN-INT M* MIN-INT FM/MOD ->  0       1 }T
+    T{       2 MIN-INT M*       2 FM/MOD ->  0 MIN-INT }T
+    T{       2 MIN-INT M* MIN-INT FM/MOD ->  0       2 }T
+    T{       1 MAX-INT M*       1 FM/MOD ->  0 MAX-INT }T
+    T{       1 MAX-INT M* MAX-INT FM/MOD ->  0       1 }T
+    T{       2 MAX-INT M*       2 FM/MOD ->  0 MAX-INT }T
+    T{       2 MAX-INT M* MAX-INT FM/MOD ->  0       2 }T
+    T{ MIN-INT MIN-INT M* MIN-INT FM/MOD ->  0 MIN-INT }T
+    T{ MIN-INT MAX-INT M* MIN-INT FM/MOD ->  0 MAX-INT }T
+    T{ MIN-INT MAX-INT M* MAX-INT FM/MOD ->  0 MIN-INT }T
+    T{ MAX-INT MAX-INT M* MAX-INT FM/MOD ->  0 MAX-INT }T
+
+    : T*/MOD >R M* R> FM/MOD ;
+
+    T{       0 2       1 */MOD ->       0 2       1 T*/MOD }T
+    T{       1 2       1 */MOD ->       1 2       1 T*/MOD }T
+    T{       2 2       1 */MOD ->       2 2       1 T*/MOD }T
+    T{      -1 2       1 */MOD ->      -1 2       1 T*/MOD }T
+    T{      -2 2       1 */MOD ->      -2 2       1 T*/MOD }T
+    T{       0 2      -1 */MOD ->       0 2      -1 T*/MOD }T
+    T{       1 2      -1 */MOD ->       1 2      -1 T*/MOD }T
+    T{       2 2      -1 */MOD ->       2 2      -1 T*/MOD }T
+    T{      -1 2      -1 */MOD ->      -1 2      -1 T*/MOD }T
+    T{      -2 2      -1 */MOD ->      -2 2      -1 T*/MOD }T
+    T{       2 2       2 */MOD ->       2 2       2 T*/MOD }T
+    T{      -1 2      -1 */MOD ->      -1 2      -1 T*/MOD }T
+    T{      -2 2      -2 */MOD ->      -2 2      -2 T*/MOD }T 
+    T{       7 2       3 */MOD ->       7 2       3 T*/MOD }T 
+    T{       7 2      -3 */MOD ->       7 2      -3 T*/MOD }T  
+    T{      -7 2       3 */MOD ->      -7 2       3 T*/MOD }T 
+    T{      -7 2      -3 */MOD ->      -7 2      -3 T*/MOD }T  
+    T{ MAX-INT 2 MAX-INT */MOD -> MAX-INT 2 MAX-INT T*/MOD }T
+    T{ MIN-INT 2 MIN-INT */MOD -> MIN-INT 2 MIN-INT T*/MOD }T
  
     DECIMAL 
   
