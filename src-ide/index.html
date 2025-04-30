@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Forth Code Editor & REPL</title>
+  <link rel="stylesheet" href="style.css" media="all">
+  <style>
+
+  </style>
+  <!-- Include Ace Editor from CDN -->
+  <script src="ace.js"></script>
+  <!-- Include Forth mode if available (fallback to plain text if not) -->
+  <script src="mode-forth.js"></script>
+</head>
+<body onload="run()">
+  <div class="container">
+    <!-- Left: Forth Code Editor -->
+    <div class="editor-container">
+      <div class="editor-header">
+        <span>Forth Code Editor</span>
+        <span id="unsaved" class="unsaved-indicator" style="display: none;">Unsaved Changes</span>
+      </div>
+      <div id="editor"></div>
+    </div>
+
+    <!-- Right: REPL Window -->
+    <div class="repl-container">
+      <div class="repl-output" id="replOutput">
+        <!-- REPL output will appear here -->
+      </div>
+      <div class="repl-input">
+        <input type="text" id="replInput" placeholder="Enter REPL command here...">
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js" type="text/javascript"></script>
+  <script src="forth.js" type="text/javascript"></script>
+</body>
+</html>
