@@ -6,7 +6,9 @@ This FORTH system strives to be compatible with the description in Lea Brodie's 
 
 ## On-line version
 
-[Try it!](https://pavel-krivanek.github.io/forth/crt/)
+[CRT terminal](https://pavel-krivanek.github.io/forth/crt/)
+
+[Teletype](https://pavel-krivanek.github.io/forth/teletype)
 
 [IDE version](https://pavel-krivanek.github.io/forth)
 

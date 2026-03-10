@@ -31,8 +31,10 @@ var shift_lock = false;
 var spoolPosition = 1;
 
 var headImage = "head.png";
-
 var printBuffer = [];
+var forthBootstrapRun = null;
+var statusMessageTimer = null;
+var focusSink = null;
 
 function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -49,7 +51,6 @@ function stop() {
 }
 
 function crlf() {
-    var line_length = x / xpx;
     y += ypx;
     maxY = Math.max(maxY, y);
     x = 0;
@@ -63,11 +64,339 @@ function advance_one_space() {
     if ((x / xpx) === max_width) {
         crlf();
         move_page();
- 
     }
 }
 
+function currentForth() {
+    return globalThis.forth;
+}
+
+function captureBootstrapRun() {
+    if (!forthBootstrapRun && typeof globalThis.run === "function" && globalThis.run !== run) {
+        forthBootstrapRun = globalThis.run;
+    }
+    return forthBootstrapRun;
+}
+
+function updateBusyIndicator() {
+    const forth = currentForth();
+    const busy = !!(forth && forth.awaitingRawInput);
+    $('#rkbusy').toggle(busy);
+}
+
+function normalizeInputChar(charCode) {
+    if (charCode === undefined || charCode === null) return null;
+    if (charCode === 13) return 10;
+    return charCode & 0xFF;
+}
+
+function maybeResumeForth() {
+    const forth = currentForth();
+    if (!forth) return;
+
+    if (forth.awaitingRawInput || ((!forth.readsFromBlock || !forth.readsFromBlock()) && forth.state !== "running")) {
+        forth.makeRunning();
+        forth.run();
+    }
+
+    updateBusyIndicator();
+}
+
+function clearKeyboardState() {
+    keydown_keys = {};
+    keypress_keys = {};
+    keydown_keycode = false;
+}
+
+function pad2(n) {
+    return String(n).padStart(2, "0");
+}
+
+function currentDiskDownloadFilename() {
+    let now = new Date();
+    let yy = pad2(now.getFullYear() % 100);
+    let mm = pad2(now.getMonth() + 1);
+    let dd = pad2(now.getDate());
+    let hh = pad2(now.getHours());
+    let mi = pad2(now.getMinutes());
+    let ss = pad2(now.getSeconds());
+    return `forth-${yy}${mm}${dd}-${hh}${mi}${ss}.img`;
+}
+
+function ensureStatusMessageElement() {
+    let element = $("#tty-status-message");
+    if (element.length > 0) return element;
+
+    element = $('<div id="tty-status-message" aria-live="polite"></div>');
+    element.css({
+        position: "fixed",
+        right: "16px",
+        bottom: "16px",
+        display: "none",
+        maxWidth: "min(40rem, calc(100vw - 32px))",
+        padding: "10px 14px",
+        borderRadius: "6px",
+        color: "#fff",
+        background: "rgba(0, 0, 0, 0.82)",
+        boxShadow: "0 6px 20px rgba(0, 0, 0, 0.35)",
+        fontFamily: "monospace",
+        fontSize: "14px",
+        zIndex: 2147483647,
+        pointerEvents: "none"
+    });
+    $("body").append(element);
+    return element;
+}
+
+function setStatusMessage(message, isError) {
+    let element = ensureStatusMessageElement();
+    if (statusMessageTimer !== null) {
+        clearTimeout(statusMessageTimer);
+        statusMessageTimer = null;
+    }
+
+    element.stop(true, true);
+    element.text(message || "");
+    element.css("background", isError ? "rgba(140, 24, 24, 0.92)" : "rgba(0, 0, 0, 0.82)");
+    element.show();
+
+    statusMessageTimer = setTimeout(function() {
+        element.fadeOut(700);
+        statusMessageTimer = null;
+    }, 3200);
+}
+
+function ensureFocusSink() {
+    if (focusSink) return focusSink;
+
+    focusSink = $('<div id="tty-focus" tabindex="0" aria-hidden="true"></div>');
+    focusSink.css({
+        position: "fixed",
+        left: "-10000px",
+        top: "0px",
+        width: "1px",
+        height: "1px",
+        opacity: 0,
+        outline: "none",
+        pointerEvents: "none"
+    });
+
+    $("body").append(focusSink);
+    return focusSink;
+}
+
+function focusTerminal() {
+    let sink = ensureFocusSink();
+    try {
+        sink[0].focus({ preventScroll: true });
+    } catch (_) {
+        sink[0].focus();
+    }
+}
+
+function saveCurrentDisk() {
+    const forth = currentForth();
+    if (!forth || !forth.disk || !forth.disk.content) {
+        setStatusMessage("No disk is available to save.", true);
+        return;
+    }
+
+    if (forth.blockBuffers && typeof forth.blockBuffers.saveBuffers === "function") {
+        forth.blockBuffers.saveBuffers();
+    }
+
+    let bytes = forth.disk.content;
+    let blob = new Blob([bytes], { type: "application/octet-stream" });
+    let url = URL.createObjectURL(blob);
+    let link = document.createElement("a");
+    let filename = currentDiskDownloadFilename();
+
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(function() {
+        URL.revokeObjectURL(url);
+    }, 1000);
+
+    setStatusMessage("Saved disk image as " + filename + ".", false);
+    focusTerminal();
+}
+
+function isImgFilename(name) {
+    return /\.img$/i.test(name || "");
+}
+
+function loadCurrentDiskFromBytes(bytes, sourceName) {
+    const forth = currentForth();
+    if (!forth || !forth.disk || !forth.disk.content) {
+        setStatusMessage("No disk is available to replace.", true);
+        return;
+    }
+
+    let diskBytes = forth.disk.content;
+    if (bytes.length > diskBytes.length) {
+        setStatusMessage("The dropped disk image is too large for the current virtual disk.", true);
+        return;
+    }
+
+    if (forth.blockBuffers && typeof forth.blockBuffers.emptyBuffers === "function") {
+        forth.blockBuffers.emptyBuffers();
+    }
+
+    diskBytes.fill(32);
+    diskBytes.set(bytes);
+    clearKeyboardState();
+    updateBusyIndicator();
+    setStatusMessage("Loaded disk image " + sourceName + ".", false);
+    focusTerminal();
+}
+
+function loadDiskImageFile(file) {
+    if (!file) return;
+    if (!isImgFilename(file.name)) {
+        setStatusMessage("Only .img files can be loaded as disks.", true);
+        return;
+    }
+
+    let reader = new FileReader();
+    reader.onload = function(event) {
+        try {
+            let bytes = new Uint8Array(event.target.result);
+            loadCurrentDiskFromBytes(bytes, file.name);
+        } catch (error) {
+            console.error(error);
+            setStatusMessage("Failed to read the dropped disk image.", true);
+        }
+    };
+    reader.onerror = function() {
+        setStatusMessage("Failed to read the dropped disk image.", true);
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function eventHasFiles(event) {
+    let dataTransfer = event && event.dataTransfer;
+    if (!dataTransfer) return false;
+    if (dataTransfer.items && dataTransfer.items.length > 0) {
+        return Array.from(dataTransfer.items).some(item => item.kind === "file");
+    }
+    if (dataTransfer.types && dataTransfer.types.length > 0) {
+        return Array.from(dataTransfer.types).indexOf("Files") !== -1;
+    }
+    return dataTransfer.files && dataTransfer.files.length > 0;
+}
+
+function preventBrowserFileDrop(event) {
+    if (!eventHasFiles(event)) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "copy";
+    }
+    return true;
+}
+
+function installDiskDropHandlers() {
+    let targets = [window, document, document.documentElement, document.body].filter(Boolean);
+
+    targets.forEach(function(target) {
+        ["dragenter", "dragover"].forEach(function(eventName) {
+            target.addEventListener(eventName, function(event) {
+                preventBrowserFileDrop(event);
+            }, true);
+        });
+
+        target.addEventListener("drop", function(event) {
+            if (!preventBrowserFileDrop(event)) return;
+            let files = Array.from((event.dataTransfer && event.dataTransfer.files) || []);
+            let file = files.find(function(candidate) { return isImgFilename(candidate.name); });
+            if (!file) {
+                setStatusMessage("Drop a .img file to load a disk image.", true);
+                focusTerminal();
+                return;
+            }
+            loadDiskImageFile(file);
+        }, true);
+    });
+}
+
+function clearTypewriter() {
+    x = 0 * xpx;
+    y = ypx;
+    maxY = y;
+    minY = y;
+    vmid = $(window).height() / 2;
+    hmid = $(window).width() / 2;
+    voffset = {};
+    brokenness = 15;
+    ink_remaining = 280;
+    ink_variation = 0.3;
+    keydown_keys = {};
+    keypress_keys = {};
+    keydown_keycode = false;
+    shift_lock = false;
+    spoolPosition = 1;
+    headImage = "head.png";
+    printBuffer = [];
+
+    $('.output').empty();
+    $('#terminal').val('');
+    $('#debug').val('');
+    $('#cursorImage').attr('src', headImage);
+    $('#Carriage, .output, .cursor').stop(true, true);
+    $('#Carriage').css({ top: (vmid - y) + 'px' });
+    $('.output').css({ height: '0px' });
+    $('.cursor').css({ top: (y + 10) + 'px', left: (x - 185) + 'px' });
+    updateBusyIndicator();
+}
+
+function reset() {
+    captureBootstrapRun();
+    clearTypewriter();
+    start();
+
+    if (!forthBootstrapRun) {
+        throw new Error("forth.js was loaded, but its bootstrap run() function was not captured.");
+    }
+
+    const forth = forthBootstrapRun();
+    globalThis.forth = forth;
+    updateBusyIndicator();
+    focusTerminal();
+    return forth;
+}
+
+function run() {
+    captureBootstrapRun();
+
+    let forth = currentForth();
+    if (!forth) {
+        if (!forthBootstrapRun) {
+            throw new Error("forth.js was loaded, but its bootstrap run() function was not captured.");
+        }
+        forth = forthBootstrapRun();
+        globalThis.forth = forth;
+        updateBusyIndicator();
+        focusTerminal();
+        return forth;
+    }
+
+    forth.makeRunning();
+    forth.run();
+    updateBusyIndicator();
+    focusTerminal();
+    return forth;
+}
+
 function keypress(e) {
+    // Let browser/system shortcuts through (Ctrl/Cmd+key), but keep AltGr combinations working.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        return false;
+    }
 
     // Prevent browser special key actions as long as ctrl/alt/cmd is not being held
     if (!e.altKey && !e.ctrlKey && !e.metaKey) {
@@ -77,7 +406,6 @@ function keypress(e) {
 
     // Don't handle keys that are handled by keydown functions
     if (e.charCode == 0) {
-        // Note the use of keyCode here so these numbers will match the keydown ones
         switch (e.keyCode) {
             case 8:
             case 9:
@@ -95,8 +423,9 @@ function keypress(e) {
                 return false;
         }
     }
+
     // Record the keypress for mutex purposes, even if we're not going to act on it
-    keypress_keys[keydown_keycode] = 1; // Have to use charCode as that's the only one available to both keypress and keyup
+    keypress_keys[keydown_keycode] = 1;
 
     // Only one printing keypress allowed at a time
     if (Object.keys(keypress_keys).length > 1) {
@@ -104,8 +433,15 @@ function keypress(e) {
     }
 
     if ((e.charCode != 10) && (e.charCode != 13)) {
-        addchar(e.charCode);
-        specialchar(e.charCode);
+        let ch = e.charCode & 0xFF;
+
+        // convert a-z to A-Z on the printable input path
+        if (ch >= 97 && ch <= 122) {
+            ch -= 32;
+        }
+
+        addchar(ch);
+        // do not call specialchar() for printable characters
     }
 }
 
@@ -127,19 +463,28 @@ function printer() {
 
 function typeCharacterImmediately(charCode, shiftKey) {
     var nosound = false;
-    if (charCode == 10) return; // ignore
-    if (charCode == 0) return; // ignore
-    if (charCode == 13) {
+    if (charCode == null || charCode === 0) return;
+
+    if (charCode === 10 || charCode === 13) {
         crlf();
         move_page();
+        setCursorPosition();
+        return;
     }
 
-    if (charCode != 32 && charCode != 127 && !((charCode === 10) || (charCode === 13)))
+    if (charCode === 9) {
+        let spaces = tab_width - ((x / xpx) % tab_width);
+        if (spaces === 0) spaces = tab_width;
+        for (let i = 0; i < spaces; i++) {
+            typeCharacterImmediately(32, shiftKey);
+        }
+        return;
+    }
+
+    if (charCode != 32 && charCode != 127)
         $("#cursorImage").attr("src", "head2.png");
 
-    var c;
-    c = String.fromCharCode(charCode);
-
+    var c = String.fromCharCode(charCode);
     if (charCode == 127) c = " ";
 
     // Vertical offset
@@ -147,16 +492,14 @@ function typeCharacterImmediately(charCode, shiftKey) {
         voffset[c] = {
             threshold: Math.floor(Math.random() * 99) + 1, // 1..99
             direction: Math.floor(Math.random() * 3) - 1, // -1..+1
-        }
+        };
     }
 
     let this_voffset = (voffset[c].threshold <= brokenness) ? Math.round(voffset[c].direction * brokenness / 33) : 0;
 
     output_character(c, this_voffset, '.output');
+    advance_one_space();
 
-    if (charCode != 10) {
-        advance_one_space();
-    }
     if (charCode == 127) {
         advance_one_space();
         advance_one_space();
@@ -219,7 +562,7 @@ function output_character(aCharacter, this_voffset, where) {
 
         if (subclips) {
             // Maybe output further subcropped character(s) in black to make the colouring more uneven
-            for (var subclips = 0; subclips < 3; subclips++) {
+            for (var subclipIndex = 0; subclipIndex < 3; subclipIndex++) {
                 var subclip_right = Math.floor(Math.random() * xpx) + 1;
                 var subclip_left = Math.floor(Math.random() * subclip_right);
                 var subclip_bottom = Math.floor(Math.random() * black_height) + 1;
@@ -238,6 +581,80 @@ function output_character(aCharacter, this_voffset, where) {
     }
 }
 
+function feedForthChar(charCode) {
+    let forth = currentForth();
+    if (!forth) {
+        forth = run();
+    }
+
+    if (!forth) return;
+
+    charCode = normalizeInputChar(charCode);
+    if (charCode === null) return;
+
+    forth.inputBuffer.push(charCode & 0xFF);
+
+    if (charCode === 95) { // underscore acts like rubout in the host UI
+        forth.inputBuffer.pop();
+        forth.inputBuffer.pop();
+    }
+
+    if (forth.awaitingRawInput) {
+        typeCharacter(charCode);
+        maybeResumeForth();
+        return;
+    }
+
+    if (charCode === 10) {
+        typeCharacter(32);
+        maybeResumeForth();
+    } else {
+        typeCharacter(charCode);
+        updateBusyIndicator();
+    }
+}
+
+function addchar(char) {
+    feedForthChar(char);
+}
+
+function typeError(aString) {
+    for (let i = 0; i < aString.length; i++) {
+        typeCharacter(aString.charCodeAt(i));
+    }
+    typeCharacter(10);
+}
+
+function typeOk() {
+    typeError("OK");
+}
+
+function specialchar(char) {
+    const forth = currentForth();
+
+    switch (char) {
+        case 8:  // backspace
+        case 46: // delete
+            feedForthChar(95);
+            break;
+        case 9:  // tab
+            feedForthChar(9);
+            break;
+        case 10:
+        case 13:
+            updateBusyIndicator();
+            break;
+        case 27:
+            if (forth && typeof forth.abortToQuit === "function") {
+                forth.abortToQuit();
+                updateBusyIndicator();
+            }
+            break;
+        default:
+            updateBusyIndicator();
+    }
+}
+
 function keydown_nonmod(e) {
     keydown_keycode = e.keyCode;
 
@@ -247,35 +664,47 @@ function keydown_nonmod(e) {
         return false;
     }
     switch (e.which) {
+        case 8: // backspace
+            if (e.charCode == 0) {
+                e.preventDefault();
+                specialchar(8);
+            }
+            break;
         case 9: // tab
             if (e.charCode == 0) {
                 e.preventDefault();
-
-                e.preventDefault()
-                specialchar(9)
+                specialchar(9);
             }
             break;
         case 13: // enter
-            addchar(13);
-            specialchar(13);
+            e.preventDefault();
+            addchar(10);
+            specialchar(10);
             break;
         case 46: // del
             if (e.charCode == 0) {
                 e.preventDefault();
                 specialchar(46);
-                printBuffer = [];
             }
-            //addchar(46);
-            //specialchar(127);
             break;
         default: // all other characters are handled by the keypress handler
     }
 }
 
-
 function keydown(e) {
     if (!started) {
         start();
+    }
+
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key && e.key.toLowerCase() === "s") {
+        if (keydown_keys[e.keyCode]) {
+            return;
+        }
+        keydown_keys[e.keyCode] = 1;
+        e.preventDefault();
+        e.stopPropagation();
+        saveCurrentDisk();
+        return;
     }
 
     // If this key is already being held down, ignore it (keyboard auto-repeat may fire multiple events)
@@ -283,7 +712,10 @@ function keydown(e) {
         return;
     }
     switch (e.which) {
-        case 27: // esc  - ignore
+        case 27: // esc
+            e.preventDefault();
+            specialchar(27);
+            break;
         case 17: // ctrl - ignore
         case 224: // cmd  - ignore
             break;
@@ -322,7 +754,6 @@ function move_page() {
 // Handler for keyup events
 function keyup(e) {
     if (Object.keys(keydown_keys).length) {
-
         delete keydown_keys[e.keyCode];
         delete keypress_keys[e.keyCode];
     }
@@ -339,10 +770,26 @@ function setCursorPosition() {
     });
 }
 
+function installForthUiBridge() {
+    captureBootstrapRun();
+
+    globalThis.run = run;
+    globalThis.reset = reset;
+    globalThis.addchar = addchar;
+    globalThis.specialchar = specialchar;
+    globalThis.typeError = typeError;
+    globalThis.typeOk = typeOk;
+}
+
 // onLoad setup
 $(function() {
+    installForthUiBridge();
+    installDiskDropHandlers();
+    ensureStatusMessageElement();
+    ensureFocusSink();
     move_page();
     setCursorPosition();
+
     $.ionSound({
         path: "",
         sounds: [{
@@ -360,6 +807,12 @@ $(function() {
     });
 
     $(document)
+        .on('mousedown', function() {
+            focusTerminal();
+        })
+        .on('touchstart', function() {
+            focusTerminal();
+        })
         .on('keydown', function(e) {
             keydown(e);
         })
@@ -370,14 +823,18 @@ $(function() {
             keyup(e);
         });
 
+    focusTerminal();
+    setStatusMessage("Ctrl+S saves the current disk. Drop a .img file anywhere to load it.", false);
+
     $(document).ready(function() {
         $('#Carriage').bind('wheel', function(e) {
-			var delta = event.deltaY;
-			if (event.deltaMode === 1)
-				delta *= char_height;
-			else if (event.deltaMode === 2)
-				delta *= char_height * 20;
-			
+            var delta = e.originalEvent ? e.originalEvent.deltaY : event.deltaY;
+            var deltaMode = e.originalEvent ? e.originalEvent.deltaMode : event.deltaMode;
+            if (deltaMode === 1)
+                delta *= char_height;
+            else if (deltaMode === 2)
+                delta *= char_height * 20;
+
             y = Math.min(maxY, y - delta);
             y = Math.max(minY, y);
             $(function() {
