@@ -8,6 +8,8 @@ This FORTH system strives to be compatible with the description in Lea Brodie's 
 
 [Try it!](https://pavel-krivanek.github.io/forth/crt/)
 
+[IDE version](https://pavel-krivanek.github.io/forth)
+
 ## Controls
 
 - `Enter` — send the current input buffer to FORTH
