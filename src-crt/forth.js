@@ -1552,6 +1552,14 @@ class ForthCodeKey extends ForthCodeWithHead {
     execute() {
         this.forth.awaitingRawInput = false;
         let usesBlock = this.forth.readsFromBlock();
+
+        // If we have reached the end of the block (or empty terminal buffer),
+        // halt execution and fallback to waiting for console input.
+        if (this.forth.atInputEnd(usesBlock)) {
+            this.forth.noInput();
+            return;
+        }
+
         let input = this.forth.readCharacter(usesBlock);
         if (this.forth.isRunning()) this.push(input);
     }
@@ -1675,8 +1683,8 @@ console.log(address);
 
 class ForthCodeQuit extends ForthCodeWithHeadCompiled {
     name() { return "quit"; }
-    flags() { return this.forth.flagImmediate(); }
-    codewordLabels() { return ["INTERPRET", "BRANCH", -4 ]}
+    flags() { return 0; } // QUIT should never be immediate
+    codewordLabels() { return["INTERPRET", "BRANCH", -4 ]}
 }
 
 // Literal primitives
@@ -2038,6 +2046,7 @@ if (typeof window !== "undefined") {
     window.forth = forth;
 }
 forth.init();
+
 let source = `
 
 
@@ -2055,7 +2064,8 @@ let source = `
 
 
 : --> IMMEDIATE
-    
+    1 BLK +!
+    0 >IN !
 ;
 
 : / /MOD SWAP DROP ;
@@ -2553,7 +2563,7 @@ let source = `
 : MIN 2DUP > IF SWAP DROP ELSE DROP THEN ;
 
 HEX
-DFFC CONSTANT PAD
+CFFC CONSTANT PAD
 DECIMAL
 
 -->
@@ -3124,8 +3134,7 @@ VARIABLE ED-FLEN
         LOOP
     THEN
     ED-TEMP @ IF .LINE-BLOCK-OK ELSE .NONE CR THEN
-;
--->
+; -->
 : N ( -- ) 1 SCR +! ;
 : B ( -- ) -1 SCR +! ;
 : FLUSH ( -- ) SAVE-BUFFERS ;
@@ -3482,7 +3491,6 @@ TSTART
     T{ MID-UINT+1          4 UM* ->           0 2 }T
     T{         1S          2 UM* -> 1S 1 LSHIFT 1 }T
     T{   MAX-UINT   MAX-UINT UM* ->    1 1 INVERT }T
-
 -->
     T{ 0 0 * -> 0 }T
     T{ 0 1 * -> 0 }T
@@ -3597,6 +3605,7 @@ TSTART
     T{ 3 4 U* -> 12 0 }T
 -->
     ( Double Addition & Math )
+
     T{ 1 0 2 0 D+ -> 3 0 }T
     T{ -1 0 1 0 D+ -> 0 1 }T  ( Carry test )
     T{ 5 0 2 0 D- -> 3 0 }T
@@ -3615,7 +3624,6 @@ TSTART
     T{ -1 -1 0 0 DU< -> <FALSE> }T
     T{ 1 0 2 0 DMIN -> 1 0 }T
     T{ 1 0 2 0 DMAX -> 2 0 }T
-
     ( Memory )
     VARIABLE B1 2 ALLOT
     VARIABLE B2 2 ALLOT
@@ -3727,7 +3735,7 @@ blockContents.forEach((blockLines, blockIndex) => {
 
 let bootstrapCode = "1 LOADPRIM";
 
-forth.input(source);
+forth.input(bootstrapCode);
 
 forth.run();
 
