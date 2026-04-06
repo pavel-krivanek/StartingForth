@@ -2,7 +2,7 @@
 
 A small browser-based FORTH system with a teletype-style terminal and a virtual disk.
 
-This FORTH system strives to be compatible with the description in Lea Brodie's book *Starting FORTH*.
+This FORTH system strives to be compatible with the description in Leo Brodie's book *Starting FORTH*.
 
 ## On-line version
 
